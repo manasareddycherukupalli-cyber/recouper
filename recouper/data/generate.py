@@ -26,10 +26,19 @@ from ..providers.entities import Customer, Invoice, Order, Payment
 
 _DAY = 86_400
 
-# A fixed "now" so runs are deterministic across days. 2026-08-30T00:00:00Z.
+# A fixed "now" so runs are deterministic across days.
+# 2026-08-30 11:00 IST (05:30 UTC).
+#
+# The time of day is load-bearing, not cosmetic. This was originally midnight
+# UTC, which is 05:30 IST -- inside the 21:00-09:00 quiet-hours window. Every
+# contact in the batch was therefore correctly refused, no treatment was
+# applied, and the experiment compared doing nothing against doing nothing
+# while reporting a perfectly respectable-looking "no significant lift".
+# A batch has to run during business hours to measure anything at all.
+#
 # Verified with datetime rather than hand-computed -- the first version of
-# this constant was a year out (see JOURNAL 2026-08-30).
-DEFAULT_NOW = 1_788_048_000
+# this constant was also a year out (see JOURNAL 2026-08-30).
+DEFAULT_NOW = 1_788_067_800
 
 
 # Failure-reason mix for failed payments.

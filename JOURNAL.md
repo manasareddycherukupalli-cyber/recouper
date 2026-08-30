@@ -176,3 +176,76 @@ expectations by hand rather than by a test going red. Worth remembering when
 the metrics land: green tests will not tell me the numbers are right.
 
 **Status end of day 2:** policy engine + 39 adversarial tests (56 total).
+
+---
+
+## 2026-08-30 — Day 3
+
+### Circuit breaker was trigger-happy, caught by a test
+
+`test_breaker_stays_closed_on_isolated_failures` went red: two failures at
+the start of a batch tripped the breaker and halted an otherwise healthy run.
+
+Cause: with `min_observations=10` and a 20% threshold, the rate is computed
+over a *partially filled* window early on. Two failures out of the first ten
+observations is exactly 20% — threshold met. A rate computed over a nearly
+empty window is dominated by noise.
+
+Fix: added a second, independent floor — `min_failures=5`. Both must clear
+before the breaker can trip. Transient bad luck no longer halts a batch,
+while a genuine outage (which produces failures in quantity) still does.
+Added `test_min_failures_does_not_prevent_tripping_on_a_real_outage` so the
+new floor cannot quietly make the breaker useless.
+
+### Retries absorb degradation; only real outages should halt
+
+The first fault-injection run produced 8 dead letters but never tripped the
+breaker, which initially looked wrong. It wasn't.
+
+At a 45% per-call failure rate with 3 transport retries, only 0.45³ ≈ 9% of
+*actions* exhaust their retries — below the 20% threshold. The retry layer
+absorbed the degradation, which is exactly what it is for. A breaker that
+tripped here would be halting batches the system can handle.
+
+So the demo needs a genuine outage (0.9) where retries cannot help. Made the
+rate a `--fault-rate` flag and documented the reasoning at the call site,
+because "why doesn't it trip at 45%?" is the obvious reviewer question.
+
+### The batch ran at 05:30 and measured nothing
+
+First full end-to-end run looked plausible: 340 cases, lift +0.7%, "not
+significant". Then the denial table: **266 contacts blocked by quiet_hours**,
+`contacts_sent = 0`.
+
+`DEFAULT_NOW` was midnight UTC = **05:30 IST**, inside the 21:00–09:00 quiet
+window. Every contact was correctly refused. So the treated arm received
+essentially no treatment, and the run compared doing nothing against doing
+nothing — while reporting a respectable-looking null result.
+
+The policy engine was perfect. The experiment was worthless. Moved
+`DEFAULT_NOW` to 11:00 IST and left a comment saying the time of day is
+load-bearing.
+
+This is the third bug in three days where **nothing crashed and no test went
+red** — a wrong year, a double-counted denominator, and now a null result
+manufactured by scheduling. All three were caught by reading output against
+expectations. For a project whose entire claim is honest measurement, the
+lesson has stopped being incidental: *a green suite tells you the code does
+what you wrote, not that what you wrote measures anything.* Every headline
+number in METRICS.md gets traced by hand before it ships.
+
+### First real result
+
+After the time fix: treated 17.3%, control 12.7%, lift **+4.6%** with a 95%
+CI of [−4.8%, +13.4%] — **not significant**. Gross recovery Rs.3,18,352
+against incremental Rs.55,323: reporting gross would have overstated impact
+**5.8×**.
+
+The wide interval is a real finding, not a defect. With a 63-case control
+arm, a 4.6-point difference genuinely cannot be distinguished from noise.
+Keeping this result rather than quietly enlarging the corpus until it went
+significant is the whole point — the framework has to be able to tell me
+"you don't know yet", or it isn't measuring anything.
+
+**Status end of day 3:** full pipeline running end to end, 98 tests, breaker
+demo halting cleanly, audit chain verified across 576 records.
