@@ -164,6 +164,21 @@ def cmd_run(args: argparse.Namespace) -> int:
             encoding="utf-8",
         )
         print(f"\nWrote {args.json}")
+
+    if args.html:
+        from .report import write_report
+
+        payload = {
+            "seed": args.seed,
+            "corpus": corpus.summary(),
+            "extraction": result.extraction,
+            "metrics": m.to_dict(),
+            "denials": result.denials,
+            "dead_letters": result.dead_letters,
+            "halted": result.halted,
+            "halt_reason": result.halt_reason,
+        }
+        print(f"Wrote {write_report(payload, args.html)}")
     return 0
 
 
@@ -196,6 +211,7 @@ def main(argv=None) -> int:
     r.add_argument("--no-llm", action="store_true",
                    help="force the deterministic planner")
     r.add_argument("--json", help="write the full result to this path")
+    r.add_argument("--html", help="write a static HTML report to this path")
     r.set_defaults(func=cmd_run)
 
     v = sub.add_parser("verify", help="verify an audit chain")

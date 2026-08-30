@@ -249,3 +249,24 @@ significant is the whole point — the framework has to be able to tell me
 
 **Status end of day 3:** full pipeline running end to end, 98 tests, breaker
 demo halting cleanly, audit chain verified across 576 records.
+
+### Chose a generated report over a served dashboard
+
+The plan called for FastAPI + React. Built a static HTML report instead.
+
+Reasoning is about the demo, not the engineering: the dashboard exists to be
+shown on camera, and a server is a liability there — ports, startup races, a
+blank page while something boots, all live in a recording. A generated file
+opens instantly and cannot fail. It also lets a reviewer see the results
+without running any of our code, and it is far less surface area to get wrong
+the day before a deadline.
+
+No scripts, no external assets, CSS inline. Renders offline and cannot break
+because a CDN moved.
+
+Worth noting as a deliberate deviation rather than a quiet descope: the
+promised capability (see the batch, the cohort breakdown, the policy denials,
+the breaker state) is all there. Only the delivery mechanism changed.
+
+**Status end of day 3 (extended):** full docs — README, ARCHITECTURE,
+METRICS — plus an HTML report. 98 tests. Code complete.

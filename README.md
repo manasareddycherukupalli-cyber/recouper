@@ -200,10 +200,16 @@ realistic threat for an operational log.
 python -m recouper.cli run --no-llm              # full batch
 python -m recouper.cli run --no-llm --faults     # outage + breaker demo
 python -m recouper.cli run --json out.json       # machine-readable result
+python -m recouper.cli run --html report.html    # visual report
 python -m recouper.cli verify runs/audit_seed42.jsonl
 python -m recouper.cli params                    # simulation parameters
 python -m pytest tests/ -q                       # 98 tests
 ```
+
+The `--html` report is a single self-contained file with no scripts and no
+external assets — it opens offline and renders identically anywhere. Chosen
+over a served dashboard deliberately: a report that is just a file has no
+ports, no startup race, and no blank-page-while-booting failure mode.
 
 **With an LLM planner** (optional): copy `.env.example` to `.env` and set
 `ANTHROPIC_API_KEY`. Without it the system runs the deterministic planner and
