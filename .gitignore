@@ -12,3 +12,7 @@ node_modules/
 dist/
 build/
 .DS_Store
+
+# Internal planning notes - not part of the submission, and contains
+# personal contact details that should not be in a public repo.
+PLAN.md
