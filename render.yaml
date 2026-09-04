@@ -16,7 +16,9 @@ services:
     startCommand: uvicorn recouper.webapp:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.13.0"
+      # No PYTHON_VERSION pin: the code needs 3.10+ only (it uses
+      # `from __future__ import annotations` throughout), and pinning an exact
+      # patch release that Render has not built is a needless way to fail a
+      # deploy. Render's default is well past 3.10.
       - key: PYTHONUNBUFFERED
         value: "1"
