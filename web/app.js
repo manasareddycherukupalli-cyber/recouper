@@ -135,6 +135,7 @@ function render(run) {
   renderMeta(run);
   renderHalt(run);
   renderCards(run);
+  renderPlanner(run);
   renderPanels(run);
   renderCohorts(run);
   populateFilters(run);
@@ -377,6 +378,122 @@ function kvRow(host, k, v, cls) {
   row.appendChild(el("span", "v" + (cls ? " " + cls : ""), String(v)));
   host.appendChild(row);
   return row;
+}
+
+// --- planner panel -----------------------------------------------------
+//
+// The dashboard was showing only half the thesis. Every panel described what
+// the policy engine refused, and nothing showed what the planner proposed or
+// why -- so the boundary the whole system is built around was invisible.
+//
+// This puts the two halves side by side on one row: the model's chosen
+// actions and its written reasoning on the left, the gate's verdict on the
+// right. Cases where the gate overruled the planner are shown first, because
+// those are the ones that demonstrate the bound actually binds.
+
+const VERDICT_TONE = { allow: "allow", deny: "deny", escalate: "escalate" };
+
+function plannerSourceLabel(source) {
+  if (source === "llm") return "Claude";
+  if (source === "llm_fallback") return "fallback";
+  return "deterministic";
+}
+
+function renderPlanner(run) {
+  const panel = $("#planner-panel");
+  const planned = (run.cases || []).filter((c) => c.plan && c.plan.actions.length);
+  if (!planned.length) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+
+  // --- stats -----------------------------------------------------------
+  const bySource = {};
+  planned.forEach((c) => {
+    const k = plannerSourceLabel(c.plan.source);
+    bySource[k] = (bySource[k] || 0) + 1;
+  });
+  const proposedActions = planned.reduce((n, c) => n + c.plan.actions.length, 0);
+  let blocked = 0;
+  planned.forEach((c) => {
+    (c.preview || []).forEach((row) => {
+      if (!row.allowed) blocked++;
+    });
+  });
+
+  const stats = $("#planner-stats");
+  stats.innerHTML = "";
+  const primary = Object.keys(bySource).sort((a, b) => bySource[b] - bySource[a])[0];
+  [
+    ["is-llm", planned.length, "plans proposed"],
+    ["", proposedActions, "actions in them"],
+    ["is-block", blocked, "overruled by policy"],
+  ].forEach(([cls, v, l]) => {
+    const d = el("div", "planner-stat " + cls);
+    d.appendChild(el("div", "ps-v", String(v)));
+    d.appendChild(el("div", "ps-l", l));
+    stats.appendChild(d);
+  });
+  const src = el("div", "planner-stat");
+  src.appendChild(el("div", "ps-v", primary === "Claude" ? "Claude" : "table"));
+  src.appendChild(el("div", "ps-l", "planner in use"));
+  stats.appendChild(src);
+
+  // --- rows: overruled cases first ------------------------------------
+  const overruled = (c) => (c.preview || []).some((r) => !r.allowed);
+  const ordered = planned
+    .slice()
+    .sort((a, b) => {
+      const d = Number(overruled(b)) - Number(overruled(a));
+      if (d) return d;
+      return b.amount_paise - a.amount_paise;
+    })
+    .slice(0, 6);
+
+  const host = $("#planner-rows");
+  host.innerHTML = "";
+  ordered.forEach((c) => {
+    const row = el("div", "planner-row");
+
+    const left = el("div");
+    left.appendChild(el("div", "pr-label", "Planner proposed"));
+    left.appendChild(el("div", "pr-case", c.case_id + " · " + titleise(c.case_class)));
+    left.appendChild(el("div", "pr-actions", c.plan.actions.map(titleise).join(" → ")));
+    left.appendChild(el("div", "pr-why", c.plan.rationale || "no rationale recorded"));
+    row.appendChild(left);
+
+    row.appendChild(el("div", "divider"));
+
+    const right = el("div");
+    right.appendChild(el("div", "pr-label", "Policy engine returned"));
+    const list = el("div", "pr-verdicts");
+    (c.preview || []).forEach((v) => {
+      const line = el("div", "pr-verdict");
+      line.appendChild(el("span", "pv-tag " + (VERDICT_TONE[v.decision] || ""), v.decision));
+      const why = el("span", "pv-why");
+      const rule = (v.checks || []).find((k) => k.decision !== "allow");
+      if (rule) {
+        why.appendChild(el("b", null, rule.rule_id));
+        why.appendChild(document.createTextNode(" — " + v.reason));
+      } else {
+        why.textContent = v.reason;
+      }
+      line.appendChild(why);
+      list.appendChild(line);
+    });
+    right.appendChild(list);
+    row.appendChild(right);
+
+    row.onclick = () => openCase(c.case_id);
+    host.appendChild(row);
+  });
+
+  const overruledCount = planned.filter(overruled).length;
+  $("#planner-foot").textContent =
+    "Showing " + ordered.length + " of " + planned.length + " plans, cases the gate overruled first. " +
+    overruledCount + " of " + planned.length + " plans had at least one action refused. " +
+    "Click any row for the full nine-rule verdict. The planner never sees these rules and cannot override them.";
 }
 
 function renderPanels(run) {

@@ -101,6 +101,22 @@
   <section class="metrics" id="metrics"></section>
   <p class="caveat" id="metric-caveat"></p>
 
+  <section class="planner-panel" id="planner-panel" hidden>
+    <div class="planner-head">
+      <div>
+        <h2>What the planner proposed <span class="hint">and what the gate did with it</span></h2>
+        <p class="planner-sub">
+          The planner chooses <b>how</b> to work a debt &mdash; which actions, in what order, and why.
+          It never decides <b>whether</b> an action is permitted. Every proposal below was re-checked
+          by nine deterministic rules that the planner cannot see, argue with, or override.
+        </p>
+      </div>
+      <div class="planner-stats" id="planner-stats"></div>
+    </div>
+    <div class="planner-rows" id="planner-rows"></div>
+    <p class="hint planner-foot" id="planner-foot"></p>
+  </section>
+
   <section class="panels">
     <div class="panel">
       <h2>Policy denials <span class="hint">by rule, as they fired</span></h2>

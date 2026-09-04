@@ -234,3 +234,73 @@ tbody tr:last-child td{border-bottom:0}
   .run-picker{min-width:100%}
   .drawer{width:100vw}
 }
+
+
+/* ---------------------------------------------------------------------
+   Planner panel
+   The project's thesis, made visible: the model's proposal on the left,
+   the gate's verdict on the right, on the same row. The boundary between
+   them is the product, so it is drawn as an actual line.
+   ------------------------------------------------------------------ */
+.planner-panel{
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:var(--panel);
+  padding:20px 22px;
+  margin-bottom:22px;
+}
+.planner-head{
+  display:flex; flex-wrap:wrap; gap:18px;
+  align-items:flex-start; justify-content:space-between;
+  border-bottom:1px solid var(--line);
+  padding-bottom:16px; margin-bottom:4px;
+}
+.planner-head h2{margin:0 0 6px}
+.planner-sub{margin:0; max-width:70ch; color:var(--muted); font-size:13px; line-height:1.55}
+.planner-sub b{color:var(--ink)}
+.planner-stats{display:flex; gap:22px; flex-wrap:wrap}
+.planner-stat{min-width:74px}
+.planner-stat .ps-v{
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:22px; font-weight:700;
+  font-variant-numeric:tabular-nums; line-height:1.1;
+}
+.planner-stat .ps-l{font-size:11px; color:var(--muted); margin-top:3px}
+.planner-stat.is-llm .ps-v{color:var(--accent)}
+.planner-stat.is-block .ps-v{color:var(--bad)}
+
+.planner-rows{display:flex; flex-direction:column}
+.planner-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 1px minmax(0,0.9fr);
+  gap:0 20px;
+  padding:14px 0;
+  border-bottom:1px solid var(--line);
+}
+.planner-row:last-child{border-bottom:none}
+.planner-row .divider{background:var(--line); width:1px}
+@media (max-width:900px){
+  .planner-row{grid-template-columns:1fr; gap:12px}
+  .planner-row .divider{display:none}
+}
+.pr-label{
+  font-size:10px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--dim); margin-bottom:6px;
+}
+.pr-case{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:var(--dim); margin-bottom:5px}
+.pr-actions{font-weight:600; font-size:14px; margin-bottom:5px}
+.pr-why{font-size:12.5px; color:var(--muted); line-height:1.5}
+.pr-verdicts{display:flex; flex-direction:column; gap:7px}
+.pr-verdict{display:flex; gap:9px; align-items:baseline; font-size:12.5px}
+.pr-verdict .pv-tag{
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:9.5px; letter-spacing:.07em;
+  text-transform:uppercase; font-weight:700;
+  padding:2px 6px; border-radius:3px; white-space:nowrap;
+}
+.pv-tag.allow{background:rgba(63,185,80,.14); color:var(--good)}
+.pv-tag.deny{background:rgba(248,81,73,.14); color:var(--bad)}
+.pv-tag.escalate{background:rgba(210,153,34,.16); color:var(--warn)}
+.pr-verdict .pv-why{color:var(--muted); line-height:1.45}
+.pr-verdict .pv-why b{color:var(--ink); font-weight:600}
+.planner-foot{margin:14px 0 0; padding-top:12px; border-top:1px solid var(--line)}
