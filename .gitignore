@@ -16,3 +16,6 @@ build/
 # Internal planning notes - not part of the submission, and contains
 # personal contact details that should not be in a public repo.
 PLAN.md
+
+# Vercel CLI local state
+.vercel/

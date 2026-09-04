@@ -66,25 +66,56 @@ two noisy proportions is itself noisy.
 
 | | |
 |---|---|
-| Treated recovery rate | 17.3% |
-| Control (self-recovery) rate | 12.7% |
-| **Lift** | **+4.6%, 95% CI [−4.8%, +13.4%] — not significant** |
-| Gross recovered | ₹3,18,352 |
-| **Incremental recovered** | **₹55,323** |
-| Overstatement if reporting gross | **5.8×** |
+| Treated recovery rate | 19.5% |
+| Control (self-recovery) rate | 20.6% |
+| **Lift** | **-1.1%, 95% CI [-12.5%, +9.2%] - not significant** |
+| Gross recovered | Rs.2,80,505 |
+| **Incremental recovered** | **-Rs.13,625** |
 
-The confidence interval contains zero, so the honest conclusion is **"this
-batch does not demonstrate a significant effect."** With a 63-case control
-arm, a 4.6-point difference cannot be distinguished from noise.
+Read literally, this batch says the agent achieved nothing. The default seed
+is kept exactly as it is: publishing a friendlier one is a single flag away,
+and resisting that is the point.
 
-That result is kept deliberately. The framework has to be able to say *"you
-don't know yet"* — a system that always reports success is not measuring
-anything. See [`METRICS.md`](METRICS.md) for the full breakdown, including
-which cohorts do show an effect.
+Because the honest response to one batch is not to argue with it but to run
+it again. Twenty times, fresh corpus and randomisation each time:
+
+```bash
+python -m recouper.cli sensitivity --full-seeds 20
+```
+
+| | |
+|---|---|
+| Mean lift | **+7.0%** (sd 4.9pp) |
+| Range across runs | -0.5% to +17.7% |
+| Positive in | 19 / 20 runs |
+| **Significant in** | **8 / 20 runs** |
+| Median overstatement if reporting gross | **2.5x** |
+
+**That is the actual finding.** Not "we recovered Rs.X" but: *a batch this
+size cannot demonstrate its own effect more than about 40% of the time.* The
+effect is real and positive; a single run is mostly noise, and seed 42
+happens to be the worst of twenty.
+
+A conventional demo runs once, keeps a good seed, reports the gross figure
+and stops. The distribution above is what that number looks like when you run
+it twenty times.
+
+And because those figures rest on a simulator, every conclusion is swept
+across a parameter space where each assumption may be wrong by up to a factor
+of two:
+
+| Conclusion | Holds in |
+|---|---|
+| **Gross overstates impact by >=2x** | **86% of draws** |
+| The intervention helps at all | 78% of draws |
+| One batch shows a >5pp lift | 39% of draws |
+
+The overstatement finding does not depend on the numbers chosen. The rupee
+figure does. See [`METRICS.md`](METRICS.md) for the full analysis.
 
 ---
 
-## The three ideas
+## The four ideas
 
 ### 1. Not every failure is recoverable, and some are harmful to touch
 
@@ -133,6 +164,43 @@ set invalidates the entire plan rather than being silently dropped.
 There is deliberately **no `force=True`** anywhere — a bound that can be
 bypassed under pressure is documentation, not policy. A test asserts the
 signature stays that way.
+
+**That claim is tested, not asserted.** A customer types their own name at
+checkout; a gateway writes its own `error_description`. Both are rendered
+into the planner's prompt, so both are attacker-controlled:
+
+```bash
+python -m recouper.cli redteam
+```
+
+26 prompt injections — instruction override, fake system turns, JSON
+breakout, unicode smuggling, and plausible-sounding operational notes with no
+keywords to filter on — run against a model assumed **fully compromised**. The
+stand-in model does not resist anything; it returns exactly the plan the
+attacker asked for, every time.
+
+| | |
+|---|---|
+| Injection attempts | 26 |
+| Reached the planner | 26 (all of them, by design) |
+| Stopped by schema validation | 7 |
+| Stopped by the policy gate | 19 |
+| **Policy bypasses** | **0** |
+
+Assuming total compromise is the only version of this test worth running.
+Measuring how often Claude resists these prompts would produce a number about
+one model on one day; it would look good, and it would change with a version
+bump. What the architecture is responsible for is what an attacker gets when
+the model gives them everything.
+
+It also means containment is verified **offline, with no API key, on every
+commit.**
+
+What the attacker still gets is reported too: attacker text reaches the audit
+rationale in 18 of 26 cases. That is not a leak — a ledger that dropped
+hostile input would be a worse ledger — but it means anything rendering that
+log must treat it as untrusted. The customer-facing message body is
+template-derived and never carries it. See [`SECURITY.md`](SECURITY.md).
 
 **Denials are logged as loudly as actions.** A run reports which rules
 blocked what:
@@ -199,11 +267,14 @@ realistic threat for an operational log.
 ```bash
 python -m recouper.cli run --no-llm              # full batch
 python -m recouper.cli run --no-llm --faults     # outage + breaker demo
+python -m recouper.cli redteam                   # 26 prompt injections, 0 bypasses
+python -m recouper.cli sensitivity               # do the conclusions survive?
+python -m recouper.cli sensitivity --full-seeds 20   # 20 whole runs (slow)
 python -m recouper.cli run --json out.json       # machine-readable result
 python -m recouper.cli run --html report.html    # visual report
 python -m recouper.cli verify runs/audit_seed42.jsonl
 python -m recouper.cli params                    # simulation parameters
-python -m pytest tests/ -q                       # 98 tests
+python -m pytest tests/ -q                       # 174 tests
 ```
 
 The `--html` report is a single self-contained file with no scripts and no
@@ -231,7 +302,8 @@ recouper/
 ├── agent/         planner (LLM + deterministic fallback), executor
 ├── outcomes/      the simulation model — every parameter documented
 ├── audit/         hash-chained ledger
-├── eval/          bootstrap CIs, incremental lift, false-positive cost
+├── eval/          bootstrap CIs, incremental lift, replay + sensitivity analysis
+├── redteam/       injection corpus + containment harness
 └── cli.py
 ```
 
@@ -260,11 +332,19 @@ more convenient than the real thing.
 ## Honest limitations
 
 - Outcomes are simulated; the rupee figures inherit whatever the model says.
-- The 21-day age half-life is a guess and a consequential one. Sensitivity
-  noted in [`METRICS.md`](METRICS.md).
+  The *conclusions* are swept across a wide parameter space
+  ([`METRICS.md`](METRICS.md)); the overstatement finding survives, the rupee
+  figures do not.
+- `ACTION_ODDS_RATIO` is the parameter that most moves the result — roughly
+  4× more than `BASE_SELF_RECOVERY`, which an earlier draft of this README
+  named as the most consequential. The sweep is how that was found out.
 - A 20% control arm on ~340 cases yields wide intervals. Adequate to detect
-  large effects, underpowered for small ones — which is exactly what the
-  headline result shows.
+  large effects, underpowered for small ones — quantified: a batch this size
+  reaches significance in 8 of 20 runs.
+- The injection corpus is 26 hand-written attacks. Zero escapes is evidence
+  about those attacks, not proof about all of them.
+- Structural assumptions are untested. Perturbing a parameter cannot tell you
+  that odds ratios composing multiplicatively is the wrong functional form.
 - Simulation parameters were fixed *before* any recovery number was computed
   and have not been touched since. Git history is the evidence.
 

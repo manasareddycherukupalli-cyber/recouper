@@ -1,0 +1,22 @@
+# Render blueprint for the Recouper operator dashboard.
+#
+# Render rather than a serverless host, on purpose. The dashboard keeps live
+# runs in memory and writes snapshots plus a hash-chained audit ledger to
+# runs/ on disk. A serverless function is stateless between invocations and
+# has no writable persistent filesystem, so create-a-run/approve-it/resume-it
+# -- the actual product lifecycle -- cannot work there.
+services:
+  - type: web
+    name: recouper
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # $PORT is assigned by Render; binding 0.0.0.0 is required to accept
+    # traffic from outside the container.
+    startCommand: uvicorn recouper.webapp:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.0"
+      - key: PYTHONUNBUFFERED
+        value: "1"

@@ -28,7 +28,8 @@ from .agent.execute import BatchHalted, Executor
 from .agent.plan import DeterministicPlanner, LLMPlanner, Planner
 from .audit.ledger import AuditLedger
 from .detect.score import Case, extract_cases
-from .eval.metrics import BatchMetrics, CaseOutcome, compute
+from .eval.metrics import BatchMetrics, compute
+from .eval.replay import CaseTrace, draw_outcomes
 from .outcomes.simulate import OutcomeModel
 from .policy.engine import PolicyEngine
 from .policy.rules import ActionType, CustomerState, DebtState, Decision, ProposedAction
@@ -57,6 +58,10 @@ class BatchResult:
     halt_reason: Optional[str] = None
     planner_stats: dict = field(default_factory=dict)
     exceptions: list = field(default_factory=list)
+    traces: list = field(default_factory=list)
+    """What the agent did, before any outcome was drawn. Retained so the
+    sensitivity analysis can re-observe this exact batch under different
+    simulator assumptions -- see eval/replay.py."""
 
 
 class BatchRunner:
@@ -107,7 +112,7 @@ class BatchRunner:
         )
 
         halted, halt_reason = False, None
-        outcomes: list[CaseOutcome] = []
+        traces: list[CaseTrace] = []
         exceptions: list[dict] = []
         actions_used = 0
 
@@ -121,7 +126,7 @@ class BatchRunner:
                 break
 
             try:
-                outcome, used, exc = self._work_case(
+                trace, used, exc = self._work_case(
                     case, by_customer.get(case.customer_id or ""), now
                 )
             except BatchHalted as exc_halt:
@@ -132,25 +137,32 @@ class BatchRunner:
                 break
 
             actions_used += used
-            outcomes.append(outcome)
+            traces.append(trace)
             if exc:
                 exceptions.append(exc)
 
         # --- control arm: observed only, never touched ---------------------
+        # No plan, no gate, no execution -- only a trace saying we left it
+        # alone. Any code path here that touched the case would contaminate
+        # the comparison the whole project rests on.
         for case in control:
-            p = self.outcomes.recovery_probability(
-                case_class=case.case_class, age_s=case.age_s, actions=[]
-            )
-            outcomes.append(
-                CaseOutcome(
+            traces.append(
+                CaseTrace(
                     case_id=case.case_id,
                     case_class=case.case_class,
                     arm="control",
                     amount_paise=case.amount_paise,
-                    recovered=self.outcomes.draw(p),
+                    age_s=case.age_s,
                 )
             )
 
+        # Outcomes are drawn only now, in one place, for both arms at once.
+        # Drawing inside the treated loop would have given the two arms
+        # different positions in the RNG stream -- a subtle way to bias a
+        # comparison that is supposed to differ only by treatment.
+        outcomes = draw_outcomes(
+            traces, params=self.outcomes.params, seed=self.outcomes.seed
+        )
         metrics = compute(outcomes)
         self.ledger.append(
             actor="system", event="batch_completed",
@@ -172,6 +184,7 @@ class BatchRunner:
             halt_reason=halt_reason,
             planner_stats=dict(planner_stats),
             exceptions=exceptions,
+            traces=traces,
         )
 
     # --- internals ---------------------------------------------------------
@@ -192,7 +205,7 @@ class BatchRunner:
 
     def _work_case(
         self, case: Case, customer, now: int
-    ) -> tuple[CaseOutcome, int, Optional[dict]]:
+    ) -> tuple[CaseTrace, int, Optional[dict]]:
         plan = self.planner.plan(case)
         self.ledger.append(
             actor="llm" if plan.source == "llm" else "system",
@@ -293,29 +306,24 @@ class BatchRunner:
             }
 
         prior = self._contacts.get(case.customer_id or "", {}).get(case.case_id, 0)
-        p = self.outcomes.recovery_probability(
-            case_class=case.case_class,
-            age_s=case.age_s,
-            actions=executed,
-            contacts_already_sent=max(0, prior - contacts),
-        )
-        recovered = self.outcomes.draw(p)
 
-        outcome = CaseOutcome(
+        # What we did, recorded without saying whether it worked. The draw
+        # happens once for the whole batch in run(), from this trace.
+        trace = CaseTrace(
             case_id=case.case_id,
             case_class=case.case_class,
             arm="treated",
             amount_paise=case.amount_paise,
-            recovered=recovered,
+            age_s=case.age_s,
+            executed=executed,
+            contacts_already_sent=max(0, prior - contacts),
             contacts_sent=contacts,
             retries_attempted=retries,
-            cost_paise=self.outcomes.action_cost_paise(
-                executed, llm_used=(plan.source == "llm")
-            ),
+            llm_used=(plan.source == "llm"),
             escalated=escalated,
             excepted=excepted,
         )
-        return outcome, actions_used, exception_detail
+        return trace, actions_used, exception_detail
 
     def _customer_state(self, case: Case, customer) -> CustomerState:
         cid = case.customer_id or ""

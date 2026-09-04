@@ -51,43 +51,61 @@ crashed. See `JOURNAL.md`, Day 1.
 
 ## Headline result
 
+### One batch first, because it is the honest place to start
+
 | | |
 |---|---|
 | Treated arm | 277 cases |
 | Control arm (untouched) | 63 cases |
-| Treated recovery rate | 17.3% |
-| **Control self-recovery rate** | **12.7%** |
-| **Lift** | **+4.6%** |
-| 95% CI (bootstrap, 2000 resamples) | **[−4.8%, +13.4%]** |
-| Significant? | **No — the interval contains zero** |
+| Treated recovery rate | 19.5% |
+| **Control self-recovery rate** | **20.6%** |
+| **Lift** | **-1.1%** |
+| 95% CI (bootstrap, 2000 resamples) | **[-12.5%, +9.2%]** |
+| Significant? | **No - the interval contains zero** |
 
 | Money | |
 |---|---|
-| Gross recovered | ₹3,18,352 |
-| **Incremental recovered** | **₹55,323** |
-| 95% CI | [−₹56,760, +₹1,59,669] |
-| **Overstatement factor** | **5.8×** |
+| Gross recovered | Rs.2,80,505 |
+| **Incremental recovered** | **-Rs.13,625** |
+| 95% CI | [-Rs.1,49,878, +Rs.1,09,687] |
+| Overstatement factor | undefined (incremental is negative) |
 
-### Reading this honestly
+On seed 42 the agent's treated arm recovered at a *lower* rate than the
+control arm. Read literally, this run says the intervention did nothing.
 
-The headline conclusion is **"this batch does not demonstrate a significant
-aggregate effect."**
+That is kept as the default seed deliberately. It would take one flag to
+publish a friendlier batch, and the temptation to do so is exactly what this
+document exists to resist.
 
-A conventional recovery demo would report **₹3.18 lakh recovered** here. That
-figure is real in the sense that the money arrived — and misleading, because
-12.7% of the control arm recovered with no intervention whatsoever. The
-system's actual contribution is at most ₹55,323, and the confidence interval
-does not exclude zero.
+### But one batch is not a result
 
-The gap between those two numbers — **5.8×** — is the entire argument for
-running a control arm.
+```bash
+python -m recouper.cli sensitivity --full-seeds 20
+```
 
-The interval is wide because the control arm is small (63 cases). That is a
-real limitation and it is reported rather than engineered away: enlarging the
-corpus until the result crossed into significance would have been trivial and
-dishonest.
+Running the entire pipeline twenty times - fresh corpus, fresh randomisation,
+fresh outcomes each time:
 
----
+| | |
+|---|---|
+| Mean lift | **+7.0%** |
+| Standard deviation | 4.9pp |
+| Range across runs | -0.5% to +17.7% |
+| Positive in | **19 / 20 runs** |
+| **Significant in** | **8 / 20 runs** |
+| Median overstatement | **2.5x** |
+
+Seed 42 is the single worst of the twenty. The effect is almost certainly
+real and positive; a batch this size simply cannot demonstrate it more than
+about 40% of the time.
+
+**This is the finding.** Not "the agent recovered Rs.X" but: *at this sample
+size, a single batch's headline is mostly noise, and any recovery system
+reporting one batch as evidence - including this one - is overclaiming.*
+
+A conventional demo would have run once, drawn a good seed, reported
+Rs.2.8 lakh gross, and stopped. The distribution above is what that number
+actually looks like when you run it twenty times.
 
 ## Per-cohort breakdown
 
@@ -96,43 +114,40 @@ statistically significant effect:
 
 | Cohort | n (T/C) | Treated | Control | Lift | 95% CI | Significant |
 |---|---|---|---|---|---|---|
-| **Re-auth** | 37 / 7 | 21.6% | 0.0% | **+21.6%** | [+8.1%, +35.1%] | **Yes** |
-| **Abandoned cart** | 67 / 23 | 10.4% | 0.0% | **+10.4%** | [+4.5%, +17.9%] | **Yes** |
-| Deferred | 41 / 12 | 24.4% | 16.7% | +7.7% | [−18.7%, +31.7%] | No |
-| Transient | 23 / 7 | 47.8% | 42.9% | +5.0% | [−36.6%, +46.6%] | No |
-| Intent-negative | 21 / 3 | 4.8% | 0.0% | +4.8% | [0.0%, +14.3%] | No |
-| Instrument-dead | 21 / 4 | 14.3% | 25.0% | −10.7% | [−60.7%, +23.8%] | No |
-| Overdue invoice | 64 / 6 | 12.5% | 33.3% | −20.8% | [−60.4%, +15.6%] | No |
-| Terminal | 1 / 1 | 0.0% | 0.0% | 0.0% | — | No action taken |
-| Unclassified | 2 / 0 | — | — | — | — | Arm too small |
+| **Deferred** | 41 / 12 | 43.9% | 16.7% | **+27.2%** | [+0.8%, +51.2%] | **Yes** |
+| Transient | 23 / 7 | 56.5% | 42.9% | +13.7% | [-32.3%, +55.3%] | No |
+| Overdue invoice | 64 / 6 | 17.2% | 16.7% | +0.5% | [-34.4%, +25.0%] | No |
+| Intent-negative | 21 / 3 | 0.0% | 0.0% | 0.0% | [0.0%, 0.0%] | No |
+| Abandoned cart | 67 / 23 | 6.0% | 17.4% | -11.4% | [-28.8%, +4.6%] | No |
+| Re-auth | 37 / 7 | 16.2% | 28.6% | -12.4% | [-46.3%, +18.9%] | No |
+| Instrument-dead | 21 / 4 | 9.5% | 25.0% | -15.5% | [-65.5%, +19.1%] | No |
+| Terminal | 1 / 1 | 0.0% | 0.0% | 0.0% | - | No action taken |
+| Unclassified | 2 / 0 | - | - | - | - | Arm too small |
 
 ### What this actually says
 
-**Where the system earns its keep:** re-auth failures (+21.6%) and abandoned
-carts (+10.4%). Both make sense mechanically — in each, the customer had
-clear intent and hit a friction point, and a payment link removes exactly
-that friction. Neither cohort self-recovers at all in the control arm, so
-essentially all recovery here is attributable.
+**Where the system earns its keep on this batch:** deferred failures
+(+27.2%, the one significant cohort). That is mechanically the most plausible
+place for it to work - an insufficient-funds decline retried after payday is
+the case where a silent retry does real work and the customer does nothing.
 
-**Where it does not:** transient failures show +5.0% with an interval spanning
-[−36.6%, +46.6%] — completely uninformative. And note the control rate is
-42.9%: these customers overwhelmingly recover on their own. Intervening here
-is close to pure waste, which is precisely the sort of spending a gross-only
-report would have justified.
+**Where the point estimate is negative:** abandoned carts, re-auth,
+instrument-dead. With control arms of 23, 7 and 4, none of these is evidence
+of harm; every interval spans zero comfortably. They are reported because a
+framework that only surfaces favourable cohorts is not a measurement
+framework.
 
-**Where it may be actively harmful:** overdue invoices show a *negative* point
-estimate (−20.8%). The control arm is 6 cases, so this is not evidence of
-harm — the interval is far too wide to conclude anything. But it is exactly
-the signal that should trigger a properly powered follow-up rather than being
-clamped to zero and forgotten. The framework reports negative lift when it
-sees it.
+**Compare this table to the cohort table in this document's git history.** On
+the previous outcome draw, re-auth and abandoned cart were the two
+*significant positive* cohorts, and deferred was not significant. The cohort
+ranking is not stable across draws at these arm sizes. Reading a per-cohort
+table from one batch and concluding "the system works on re-auth" would have
+been wrong then and would be wrong now.
 
-**Honest note on the two significant results:** control arms of 7 and 23 are
-small. A control rate of exactly 0.0% in both is partly a small-sample
-artefact. The direction is credible and mechanically plausible; the magnitude
-should be treated as provisional.
-
----
+**Intent-negative shows exactly 0.0% in both arms.** That is not a bug: the
+class permits at most one soft nudge, and these customers actively cancelled.
+The model gives them a 7% base rate decayed by age, and no case in either arm
+drew a recovery.
 
 ## Cost of intervening
 
@@ -140,17 +155,16 @@ should be treated as provisional.
 |---|---|
 | Contacts sent | 103 |
 | Retries attempted | 27 |
-| Total cost | ₹79.75 |
-| Cost per ₹1 recovered | ₹0.0014 |
-| **Wasted contacts** | **13** |
-| Monetary cost of wasted contacts | ₹15.25 |
+| Total cost | Rs.79.75 |
+| **Wasted contacts** | **21** |
+| Monetary cost of wasted contacts | Rs.17.25 |
 
 "Wasted contacts" are customers we messaged who would have recovered anyway,
 estimated by applying the control-arm self-recovery rate to the contacted
-population. **We cannot identify which 13** — that is the fundamental limit
+population. **We cannot identify which 21** - that is the fundamental limit
 of a randomised design, not a gap in the implementation.
 
-The ₹15.25 figure understates the real cost. The monetary cost of an
+The Rs.17.25 figure understates the real cost. The monetary cost of an
 unnecessary email is trivial; the goodwill cost is not, and nothing here
 captures it. That asymmetry is why the contact caps are conservative.
 
@@ -212,26 +226,96 @@ decided *not* to do.
 
 ---
 
-## Sensitivities worth checking
+## Sensitivity analysis
 
-Ordered by how much they'd move the result:
+The disclaimer at the top of this document tells you to distrust the rupee
+figures. It does not tell you which findings are properties of the *system*
+and which are properties of the numbers in `simulate.py`. This section
+answers that.
 
-1. **`BASE_SELF_RECOVERY`** — directly sets the control-arm rate, so it
-   directly sets the gap between gross and incremental. The single most
-   consequential set of numbers in the project.
-2. **21-day age half-life** — a guess. Governs how fast a debt becomes
-   unrecoverable, so it shifts which cohorts look worth working.
-3. **`ACTION_ODDS_RATIO`** — sets treated-arm uplift. Modelled as odds ratios
-   rather than additive bumps, so effects compose correctly and stay in range.
-4. **Control fraction (20%)** — the precision/cost trade-off. A larger control
-   arm would tighten every interval here at the cost of recovering less money
-   in the run itself.
+```bash
+python -m recouper.cli sensitivity
+```
 
-Change any of these in `recouper/outcomes/simulate.py` and re-run; the
-framework is the deliverable, and it will report whatever the parameters
-imply — including that the agent achieved nothing.
+The agent's behaviour is held fixed throughout. One batch is executed, its
+per-case actions recorded as traces, and only the *observation* step is
+re-run under different assumptions - so every difference below is
+attributable to the parameters, never to the agent quietly doing something
+else. Each case keeps one fixed uniform draw across all parameter sets
+(common random numbers), so comparisons are not swamped by Monte Carlo noise.
 
----
+### Which assumptions actually drive the result
+
+Each group scaled 0.5x to 2.0x on its own; the figure is the range of mean
+lift that induces.
+
+| Parameter group | Influence on lift |
+|---|---|
+| `ACTION_ODDS_RATIO` | **10.4pp** |
+| `AGE_HALF_LIFE` | 2.5pp |
+| `BASE_SELF_RECOVERY` | 2.1pp |
+| `CONTACT_FATIGUE` | 1.0pp |
+| Unit costs | **0.0pp** |
+
+Two things worth noting. `ACTION_ODDS_RATIO` dominates by roughly 4x, so it
+is the number to attack first if you want to argue with the result - not
+`BASE_SELF_RECOVERY`, which the original version of this document named as
+the most consequential parameter. That was wrong, and the sweep is how it was
+found out.
+
+Costs moving the lift by *exactly* zero is the harness's own control: costs
+never enter the recovery probability, so any non-zero value there would mean
+the analysis was wired wrong rather than that costs matter. A test asserts it
+stays zero.
+
+### Does the conclusion survive?
+
+Every group perturbed simultaneously, log-uniform on [0.5x, 2.0x], 400 draws,
+each with its own outcome seed:
+
+| Conclusion | Holds in |
+|---|---|
+| **Gross overstates impact by >=2x** | **86% of draws** (defined in 311) |
+| The intervention helps at all | 78% of draws |
+| One batch shows a >5pp lift | 39% of draws |
+
+The overstatement finding is robust: across a parameter space where every
+assumption may be wrong by up to a factor of two, gross reporting still
+overstates impact by at least double in roughly six draws out of seven. It
+does not depend on the specific numbers chosen.
+
+The third row is included because it is expected to *fail*. A sensitivity
+analysis that only tests conclusions it expects to survive is decoration.
+
+### How much of one batch is luck
+
+Redrawing outcomes 300 times on the same executed batch, parameters
+unchanged:
+
+| | |
+|---|---|
+| Mean lift | +4.1% |
+| Standard deviation | 4.8pp |
+| 90% of draws | [-4.5%, +11.8%] |
+| Positive in | 79% of draws |
+| **Its own CI excludes zero in** | **17% of draws** |
+
+A batch of this size would license a claim of significance about one time in
+six. Any single-batch headline - including the one at the top of this
+document - is mostly a draw.
+
+### What this does not cover
+
+- The randomisation is fixed within a replay, so `seed_stability` measures
+  outcome noise only. `--full-seeds` measures the rest, and is the number
+  quoted in the headline section.
+- Parameters are scaled as groups, not individually. A sweep where
+  `retry_payment` moves but `send_reminder` does not would be more precise
+  and is not implemented.
+- The structural assumptions are untested: that odds ratios compose
+  multiplicatively, that age decay is exponential, that contacts fatigue
+  independently of channel. Perturbing a parameter cannot tell you the
+  functional form is wrong.
 
 ## What I'd do with real data
 

@@ -110,6 +110,14 @@ that touches money must work when the model is unavailable.
 the intent. Its judgment is applied where judgment helps — weighing debt age
 against amount against history — and withheld where correctness is required.
 
+**This is verified, not assumed.** `redteam/` runs 26 prompt injections
+against a model stubbed to be *fully compromised* — it returns exactly what
+the attacker asked for, every time. 7 attacks die at schema validation, 19 at
+the policy gate, 0 get through. Testing against a compromised stub rather
+than the real model is deliberate: containment then becomes a property of
+this codebase, verifiable offline with no API key on every commit, rather
+than a property of one model version. See [`SECURITY.md`](SECURITY.md).
+
 ### 3. Deny by default, with no override
 
 Nine rules in `policy/rules.py`, each a named, individually-tested predicate.
@@ -252,6 +260,30 @@ two populations would inflate the result.
 **Negative lift is reported, not clamped.** Badly-timed dunning can push a
 wavering customer into cancelling. A framework that floors at zero conceals
 exactly the finding an operator most needs.
+
+### Execution and observation are separate phases
+
+`eval/replay.py` splits a run in two: the agent works cases and records a
+`CaseTrace` per case, then outcomes are drawn from those traces. Nothing in
+`policy/`, `agent/` or `detect/` ever reads a recovery probability, so the
+agent's behaviour is genuinely independent of the outcome model.
+
+That independence is what makes `eval/sensitivity.py` meaningful. It replays
+one fixed batch under thousands of parameter sets, so any variation in the
+reported metrics is attributable to the assumptions alone — re-running the
+whole pipeline per draw would vary the agent's behaviour too and confound the
+two.
+
+Each case carries one fixed uniform draw derived from `(case_id, seed)`
+rather than a position in an RNG stream. Two consequences: comparing
+parameter sets compares the same sample rather than two different ones
+(without this, small real differences vanish into Monte Carlo noise), and a
+halted or resumed batch reproduces identical outcomes regardless of ordering.
+
+Outcomes are drawn once for both arms together at the end of the batch rather
+than inside the treated loop, so the two arms cannot occupy different
+positions in a random stream — a subtle way to bias a comparison that is
+supposed to differ only by treatment.
 
 ---
 

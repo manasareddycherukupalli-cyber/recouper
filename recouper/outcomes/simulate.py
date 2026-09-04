@@ -26,12 +26,19 @@ number was computed, and have not been adjusted since. Tuning a simulator
 until the agent looks good would make the entire exercise circular. The git
 history is the evidence -- this file's values are unchanged from the commit
 that introduced it.
+
+That commitment answers "did you cheat?". It does not answer the harder
+question, "does the conclusion depend on these particular numbers?" -- so the
+constants below are also exposed as a `SimParams` value object, which
+`recouper/eval/sensitivity.py` perturbs across a wide range. A finding that
+survives that sweep does not rest on the figures in this file. One that does
+not survive is reported as parameter-dependent rather than as a result.
 """
 
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 from ..detect.classify import RecoveryClass
@@ -103,8 +110,8 @@ FATIGUE_BEYOND_CAP = 0.10
 
 # Debt age decay: intent fades. A week-old abandoned cart is a far weaker
 # prospect than a two-hour-old one. Modelled as exponential with a 21-day
-# half-life, which is a guess, and a consequential one -- flagged in
-# METRICS.md as a sensitivity worth checking.
+# half-life, which is a guess, and a consequential one -- swept explicitly in
+# the sensitivity analysis for exactly that reason.
 AGE_HALF_LIFE_S = 21 * _DAY
 
 
@@ -115,21 +122,144 @@ COST_PER_RETRY_ATTEMPT_PAISE = 200   # ~Rs.2, gateway fee on a failed attempt
 COST_PER_LLM_PLAN_PAISE = 150        # ~Rs.1.50, one planner call
 
 
+# The groups the sensitivity sweep perturbs, one at a time. Declared here,
+# next to the values, so that adding a parameter forces a decision about
+# whether it is swept rather than letting it quietly escape the analysis.
+PARAM_GROUPS: tuple[str, ...] = (
+    "base_self_recovery",
+    "action_odds_ratio",
+    "contact_fatigue",
+    "age_half_life",
+    "costs",
+)
+
+
+def _clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
+
+
+@dataclass(frozen=True)
+class SimParams:
+    """The whole simulator as one perturbable value.
+
+    Frozen and copied rather than mutated, because the sensitivity sweep runs
+    many parameter sets against the same traces, and a shared mutable global
+    would silently leak one draw's parameters into the next.
+    """
+
+    base_self_recovery: dict[str, float] = field(
+        default_factory=lambda: dict(BASE_SELF_RECOVERY)
+    )
+    action_odds_ratio: dict[str, float] = field(
+        default_factory=lambda: dict(ACTION_ODDS_RATIO)
+    )
+    contact_fatigue: dict[int, float] = field(
+        default_factory=lambda: dict(CONTACT_FATIGUE)
+    )
+    fatigue_beyond_cap: float = FATIGUE_BEYOND_CAP
+    age_half_life_s: float = float(AGE_HALF_LIFE_S)
+    cost_per_message_paise: int = COST_PER_MESSAGE_PAISE
+    cost_per_retry_attempt_paise: int = COST_PER_RETRY_ATTEMPT_PAISE
+    cost_per_llm_plan_paise: int = COST_PER_LLM_PLAN_PAISE
+    unknown_class_base_rate: float = 0.15
+
+    def scaled(self, group: str, factor: float) -> "SimParams":
+        """Return a copy with one parameter group multiplied by `factor`.
+
+        Each group is clamped to the range where it still means something:
+
+        * probabilities to (0, 1) -- a base rate of 1.1 is not a stronger
+          claim, it is a broken one;
+        * odds ratios to a small positive floor, so a scaled-down ratio may
+          fall below 1.0 -- an action that actively harms recovery. That is a
+          real hypothesis and the sweep should be able to reach it;
+        * fatigue to [0, 1], since it is a discount on an action's effect.
+        """
+        if group == "base_self_recovery":
+            return replace(
+                self,
+                base_self_recovery={
+                    k: _clamp(v * factor, 1e-4, 0.999)
+                    for k, v in self.base_self_recovery.items()
+                },
+                unknown_class_base_rate=_clamp(
+                    self.unknown_class_base_rate * factor, 1e-4, 0.999
+                ),
+            )
+        if group == "action_odds_ratio":
+            return replace(
+                self,
+                action_odds_ratio={
+                    k: max(v * factor, 1e-3)
+                    for k, v in self.action_odds_ratio.items()
+                },
+            )
+        if group == "contact_fatigue":
+            return replace(
+                self,
+                contact_fatigue={
+                    k: _clamp(v * factor, 0.0, 1.0)
+                    for k, v in self.contact_fatigue.items()
+                },
+                fatigue_beyond_cap=_clamp(
+                    self.fatigue_beyond_cap * factor, 0.0, 1.0
+                ),
+            )
+        if group == "age_half_life":
+            return replace(
+                self, age_half_life_s=max(self.age_half_life_s * factor, 60.0)
+            )
+        if group == "costs":
+            return replace(
+                self,
+                cost_per_message_paise=max(
+                    int(round(self.cost_per_message_paise * factor)), 0
+                ),
+                cost_per_retry_attempt_paise=max(
+                    int(round(self.cost_per_retry_attempt_paise * factor)), 0
+                ),
+                cost_per_llm_plan_paise=max(
+                    int(round(self.cost_per_llm_plan_paise * factor)), 0
+                ),
+            )
+        raise ValueError(f"unknown parameter group: {group!r}")
+
+    def to_dict(self) -> dict:
+        return {
+            "base_self_recovery": dict(self.base_self_recovery),
+            "action_odds_ratio": dict(self.action_odds_ratio),
+            "contact_fatigue": {str(k): v for k, v in self.contact_fatigue.items()},
+            "fatigue_beyond_cap": self.fatigue_beyond_cap,
+            "age_half_life_days": self.age_half_life_s / _DAY,
+            "costs_paise": {
+                "message": self.cost_per_message_paise,
+                "retry_attempt": self.cost_per_retry_attempt_paise,
+                "llm_plan": self.cost_per_llm_plan_paise,
+            },
+        }
+
+
+DEFAULT_PARAMS = SimParams()
+
+
 @dataclass
 class OutcomeModel:
     """Draws recovery outcomes. Seeded, so a run is reproducible."""
 
     seed: int = 2026
+    params: SimParams = DEFAULT_PARAMS
     rng: random.Random = field(init=False)
 
     def __post_init__(self) -> None:
         self.rng = random.Random(self.seed)
 
     def base_rate(self, case_class: str) -> float:
-        return BASE_SELF_RECOVERY.get(case_class, 0.15)
+        return self.params.base_self_recovery.get(
+            case_class, self.params.unknown_class_base_rate
+        )
 
     def age_factor(self, age_s: int) -> float:
-        return 0.5 ** (age_s / AGE_HALF_LIFE_S)
+        return 0.5 ** (age_s / self.params.age_half_life_s)
 
     def recovery_probability(
         self,
@@ -152,16 +282,18 @@ class OutcomeModel:
 
         contacts = contacts_already_sent
         for action in actions:
-            ratio = ACTION_ODDS_RATIO.get(action, 1.0)
+            ratio = self.params.action_odds_ratio.get(action, 1.0)
             if action in ("send_reminder", "create_payment_link"):
-                fatigue = CONTACT_FATIGUE.get(contacts, FATIGUE_BEYOND_CAP)
+                fatigue = self.params.contact_fatigue.get(
+                    contacts, self.params.fatigue_beyond_cap
+                )
                 contacts += 1
             else:
                 fatigue = 1.0
             # Scale the *excess* odds by fatigue, so a fatigued action tends
             # toward no effect rather than toward harm.
             effective = 1.0 + (ratio - 1.0) * fatigue
-            odds *= effective
+            odds *= max(effective, 1e-9)
 
         return odds / (1 + odds)
 
@@ -169,12 +301,12 @@ class OutcomeModel:
         return self.rng.random() < probability
 
     def action_cost_paise(self, actions: list[str], *, llm_used: bool) -> int:
-        cost = COST_PER_LLM_PLAN_PAISE if llm_used else 0
+        cost = self.params.cost_per_llm_plan_paise if llm_used else 0
         for a in actions:
             if a in ("send_reminder", "create_payment_link"):
-                cost += COST_PER_MESSAGE_PAISE
+                cost += self.params.cost_per_message_paise
             elif a == "retry_payment":
-                cost += COST_PER_RETRY_ATTEMPT_PAISE
+                cost += self.params.cost_per_retry_attempt_paise
         return cost
 
 
@@ -184,15 +316,4 @@ def model_parameters() -> dict:
     Published rather than buried so that a reviewer can see exactly what the
     simulated outcomes rest on.
     """
-    return {
-        "base_self_recovery": dict(BASE_SELF_RECOVERY),
-        "action_odds_ratio": dict(ACTION_ODDS_RATIO),
-        "contact_fatigue": {str(k): v for k, v in CONTACT_FATIGUE.items()},
-        "fatigue_beyond_cap": FATIGUE_BEYOND_CAP,
-        "age_half_life_days": AGE_HALF_LIFE_S / _DAY,
-        "costs_paise": {
-            "message": COST_PER_MESSAGE_PAISE,
-            "retry_attempt": COST_PER_RETRY_ATTEMPT_PAISE,
-            "llm_plan": COST_PER_LLM_PLAN_PAISE,
-        },
-    }
+    return DEFAULT_PARAMS.to_dict()

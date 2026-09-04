@@ -45,6 +45,36 @@ class CaseOutcome:
     escalated: bool = False
     excepted: bool = False
 
+    def to_dict(self) -> dict:
+        """Return a JSON-safe representation for reports and the dashboard."""
+        return {
+            "case_id": self.case_id,
+            "case_class": self.case_class,
+            "arm": self.arm,
+            "amount_paise": self.amount_paise,
+            "recovered": self.recovered,
+            "contacts_sent": self.contacts_sent,
+            "retries_attempted": self.retries_attempted,
+            "cost_paise": self.cost_paise,
+            "escalated": self.escalated,
+            "excepted": self.excepted,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "CaseOutcome":
+        return cls(
+            case_id=data["case_id"],
+            case_class=data["case_class"],
+            arm=data["arm"],
+            amount_paise=int(data["amount_paise"]),
+            recovered=bool(data["recovered"]),
+            contacts_sent=int(data.get("contacts_sent", 0)),
+            retries_attempted=int(data.get("retries_attempted", 0)),
+            cost_paise=int(data.get("cost_paise", 0)),
+            escalated=bool(data.get("escalated", False)),
+            excepted=bool(data.get("excepted", False)),
+        )
+
 
 @dataclass
 class ProportionCI:

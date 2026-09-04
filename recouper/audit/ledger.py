@@ -92,6 +92,12 @@ class AuditRecord:
         d["hash"] = self.hash
         return json.dumps(d, default=str)
 
+    def to_dict(self) -> dict:
+        """Return the complete record for API consumers."""
+        d = self.payload()
+        d["hash"] = self.hash
+        return d
+
     @classmethod
     def from_dict(cls, d: dict) -> "AuditRecord":
         return cls(

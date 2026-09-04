@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recouper — Operator Dashboard</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<div id="progress" class="progress"></div>
+
+<div id="mode-banner" class="mode-banner">
+  <div class="shell mode-banner-inner">
+    <span class="pill">SIMULATED / TEST MODE</span>
+    <span>Every retry, payment link and reminder is executed against an in-process mock.
+      No real customer is contacted and no real money moves.</span>
+  </div>
+</div>
+
+<header class="topbar">
+  <div class="shell topbar-inner">
+    <div class="brand">
+      <h1>Recouper</h1>
+      <p class="sub">Policy-gated revenue recovery, with an honest control arm</p>
+    </div>
+    <div class="run-picker">
+      <label for="run-select">Run history</label>
+      <select id="run-select"></select>
+    </div>
+  </div>
+</header>
+
+<section class="toolbar">
+  <div class="shell toolbar-inner">
+    <div class="tool-group">
+      <span class="tool-label">New batch</span>
+      <div class="tool-row">
+        <div class="field">
+          <label for="seed">Seed</label>
+          <input id="seed" type="number" value="42" min="0" step="1">
+        </div>
+        <div class="field">
+          <label for="control-fraction">Control</label>
+          <input id="control-fraction" type="number" value="0.20" min="0" max="0.9" step="0.05">
+        </div>
+        <button id="btn-run" class="btn primary">Start run</button>
+        <button id="btn-run-faults" class="btn">Start with faults</button>
+      </div>
+    </div>
+
+    <div class="tool-divider"></div>
+
+    <div class="tool-group">
+      <span class="tool-label">Current run</span>
+      <div class="tool-row">
+        <button id="btn-approve" class="btn good" disabled>Approve all policy-allowed plans</button>
+        <button id="btn-resume" class="btn warn" disabled>Resume</button>
+        <button id="btn-verify" class="btn" disabled>Verify hash chain</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="shell">
+  <div id="status-line" class="status-line"></div>
+</div>
+
+<section id="empty-state" class="shell empty-state">
+  <div class="empty-card">
+    <h2>No run loaded</h2>
+    <p>
+      Recouper extracts at-risk money from failed payments, abandoned checkouts and overdue
+      invoices, classifies each case by why it failed, proposes a bounded plan, and refuses
+      anything the policy engine does not allow. A fifth of every batch is held back as an
+      untouched control arm so the recovery number can be checked rather than believed.
+    </p>
+    <ol class="steps">
+      <li><b>Start a run.</b> Cases are extracted, classified and planned. Nothing is executed
+        and no customer is contacted — every plan waits for you.</li>
+      <li><b>Review.</b> Open any case to see its classification, its proposed plan, and every
+        policy check with the reason it passed or blocked.</li>
+      <li><b>Approve.</b> Approve one case or the whole batch. Policy re-runs immediately before
+        each action, so approval can never push a denied action through.</li>
+      <li><b>Verify.</b> Every decision — yours and the system's — is a hash-chained audit
+        record you can verify from this page.</li>
+    </ol>
+    <p class="hint">
+      Try <b>Start with faults</b> to watch the circuit breaker halt a batch mid-flight, then
+      resume it from its checkpoint without repeating completed work.
+    </p>
+  </div>
+</section>
+
+<main id="run-view" class="shell" hidden>
+
+  <div id="halt-banner" class="halt-banner" hidden></div>
+
+  <section class="run-meta" id="run-meta"></section>
+
+  <section class="metrics" id="metrics"></section>
+  <p class="caveat" id="metric-caveat"></p>
+
+  <section class="panels">
+    <div class="panel">
+      <h2>Policy denials <span class="hint">by rule, as they fired</span></h2>
+      <div id="panel-denials"></div>
+    </div>
+    <div class="panel">
+      <h2>Run integrity</h2>
+      <div id="panel-integrity"></div>
+    </div>
+    <div class="panel">
+      <h2>Escalations &amp; exceptions</h2>
+      <div id="panel-exceptions"></div>
+    </div>
+    <div class="panel">
+      <h2>Dead letters <span class="hint">gave up after retries</span></h2>
+      <div id="panel-deadletters"></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Recovery by class</h2>
+    <div class="table-scroll" id="panel-cohorts"></div>
+  </section>
+
+  <section class="block">
+    <h2>Cases <span class="hint" id="case-count"></span></h2>
+    <div class="filters">
+      <input id="f-search" type="search" placeholder="Search case, customer, reason…">
+      <select id="f-class"><option value="">All classes</option></select>
+      <select id="f-status"><option value="">All statuses</option></select>
+      <select id="f-arm">
+        <option value="">Both arms</option>
+        <option value="treated">Treated</option>
+        <option value="control">Control</option>
+      </select>
+      <select id="f-denial"><option value="">Any policy outcome</option></select>
+      <input id="f-min-amount" type="number" min="0" step="100" placeholder="Min ₹">
+      <label class="check"><input id="f-exceptions" type="checkbox"> Exceptions only</label>
+      <button id="f-reset" class="btn tiny">Reset</button>
+    </div>
+    <div class="table-scroll tall">
+      <table id="case-table">
+        <thead>
+          <tr>
+            <th>Case</th><th>Class</th><th>Arm</th><th class="num">Amount</th>
+            <th class="num">Age</th><th>Plan</th><th>Status</th><th>Outcome</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<div id="drawer-scrim" class="scrim" hidden></div>
+<aside id="drawer" class="drawer" hidden></aside>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
