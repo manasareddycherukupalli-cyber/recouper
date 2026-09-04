@@ -304,3 +304,37 @@ tbody tr:last-child td{border-bottom:0}
 .pr-verdict .pv-why{color:var(--muted); line-height:1.45}
 .pr-verdict .pv-why b{color:var(--ink); font-weight:600}
 .planner-foot{margin:14px 0 0; padding-top:12px; border-top:1px solid var(--line)}
+
+
+/* ---------------------------------------------------------------------
+   Next step
+   The dashboard is a two-phase workflow -- propose, then approve -- and a
+   first-time reader could not tell that from a screen of counters and five
+   equally-weighted buttons. This states the one thing to do next, and puts
+   the button that does it inside the same block.
+   ------------------------------------------------------------------ */
+.nextstep{
+  display:flex; flex-wrap:wrap; align-items:center; gap:16px;
+  justify-content:space-between;
+  border:1px solid #2d4a6b;
+  border-left:3px solid var(--accent);
+  border-radius:var(--radius);
+  background:linear-gradient(180deg,#16202e,#141a24);
+  padding:16px 20px;
+  margin-bottom:20px;
+}
+.nextstep .ns-text{min-width:260px; flex:1}
+.nextstep .ns-title{font-weight:600; font-size:15px; margin-bottom:3px}
+.nextstep .ns-body{color:var(--muted); font-size:13px; line-height:1.5; max-width:78ch}
+.nextstep .ns-body b{color:var(--ink); font-weight:600}
+
+/* One dominant action. Everything else on the page is a .btn and recedes. */
+.btn.cta{
+  background:var(--accent); border-color:var(--accent); color:#08121d;
+  font-weight:600; font-size:13.5px; padding:10px 20px;
+}
+.btn.cta:hover:not(:disabled){background:#7cbaff; border-color:#7cbaff}
+.btn.cta.is-good{background:#3fb950; border-color:#3fb950; color:#06210e}
+.btn.cta.is-good:hover:not(:disabled){background:#57c96a; border-color:#57c96a}
+.btn.cta.is-warn{background:var(--warn); border-color:var(--warn); color:#1e1503}
+.btn.cta.is-warn:hover:not(:disabled){background:#e3ab30; border-color:#e3ab30}

@@ -134,6 +134,7 @@ function render(run) {
   $("#empty-state").hidden = true;
   renderMeta(run);
   renderHalt(run);
+  renderNextStep(run);
   renderCards(run);
   renderPlanner(run);
   renderPanels(run);
@@ -166,15 +167,10 @@ function renderMeta(run) {
   host.innerHTML = "";
   const label = STATUS_LABEL[run.status] || [titleise(run.status), ""];
   metaItem(host, "Status", label[0], label[1]);
-  const started = run.created_at ? new Date(run.created_at * 1000) : null;
-  metaItem(
-    host,
-    "Started",
-    started ? started.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"
-  );
-  metaItem(host, "Run id", run.run_id.split("_").pop());
   metaItem(host, "Seed", String(run.seed));
-  metaItem(host, "Mode", run.original_faults ? "faults injected" : "simulator", run.original_faults ? "warn" : "");
+  // Mode is only worth a slot when it is not the default; on a normal run it
+  // is one more thing to read that says nothing.
+  if (run.original_faults) metaItem(host, "Mode", "faults injected", "warn");
   metaItem(host, "Cases", run.cases.length + " (" + run.progress.treated_total + " treated)");
   metaItem(host, "Actions executed", String(run.actions_used));
 
@@ -187,6 +183,76 @@ function renderMeta(run) {
   fill.style.width = Math.round((done / total) * 100) + "%";
   bar.appendChild(fill);
   item.appendChild(bar);
+}
+
+// --- next step ---------------------------------------------------------
+//
+// The dashboard is a two-phase workflow: plans are proposed, then a human
+// approves them. Nothing on the screen said so, which left a first-time
+// reader looking at a wall of counters and five equally-weighted buttons
+// with no idea which one was the point. This names the next action and puts
+// the button for it in the same block.
+
+function renderNextStep(run) {
+  const bar = $("#nextstep");
+  const btn = $("#ns-action");
+  const title = $("#ns-title");
+  const body = $("#ns-body");
+
+  btn.className = "btn cta";
+  btn.onclick = null;
+
+  if (run.status === "awaiting_approval") {
+    const treated = run.cases.filter((c) => c.arm === "treated");
+    let blocked = 0;
+    treated.forEach((c) => (c.preview || []).forEach((v) => { if (!v.allowed) blocked++; }));
+    title.textContent = "Nothing has run yet — approve the batch to execute it";
+    body.innerHTML = "";
+    body.appendChild(document.createTextNode(""));
+    const b = el("b", null, String(treated.length) + " plans");
+    body.appendChild(b);
+    body.appendChild(document.createTextNode(
+      " are proposed and waiting. Approving runs only what policy permits: the gate re-checks " +
+      "every action against live state immediately before it fires, so approval cannot push a " +
+      "denied action through. " + blocked + " actions are already blocked on today's state."
+    ));
+    btn.textContent = "Approve all policy-allowed plans";
+    btn.classList.add("is-good");
+    btn.onclick = () => $("#btn-approve").click();
+    bar.hidden = false;
+    return;
+  }
+
+  if (run.status === "halted") {
+    title.textContent = "Batch halted by the circuit breaker";
+    body.textContent =
+      "Completed work is checkpointed and will not be repeated. Resuming resets the breaker, " +
+      "which is deliberately a human action — a breaker that reset itself would re-trip against " +
+      "a still-broken gateway.";
+    btn.textContent = "Resume from checkpoint";
+    btn.classList.add("is-warn");
+    btn.onclick = () => $("#btn-resume").click();
+    bar.hidden = false;
+    return;
+  }
+
+  if (run.status === "completed") {
+    const m = run.metrics;
+    const sig = m && m.recovery_rates.lift.significant;
+    title.textContent = "Run complete — every decision is on the audit chain";
+    body.textContent = sig
+      ? "The lift interval stays on one side of zero on this run. Verify the chain to confirm no " +
+        "record was altered, then open any case to see the nine-rule verdict behind it."
+      : "The lift interval crosses zero, so this run does not show the intervention beat doing " +
+        "nothing — which is reported rather than hidden. Verify the chain to confirm no record " +
+        "was altered, then open any case to see the nine-rule verdict behind it.";
+    btn.textContent = "Verify hash chain";
+    btn.onclick = () => $("#btn-verify").click();
+    bar.hidden = false;
+    return;
+  }
+
+  bar.hidden = true;
 }
 
 function renderHalt(run) {
