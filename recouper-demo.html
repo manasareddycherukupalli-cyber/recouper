@@ -317,6 +317,26 @@
   }
   .footnote code{font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--surface-sunk);padding:1px 5px;border-radius:2px;}
 
+  .live-bar{
+    display:flex;flex-wrap:wrap;align-items:center;gap:14px;
+    margin-top:26px;padding:16px 18px;
+    border:1px solid var(--rule);border-left:3px solid var(--petrol);
+    border-radius:2px;background:var(--surface);
+  }
+  .live-bar .lb-text{font-size:.92rem;color:var(--ink-soft);flex:1;min-width:240px;}
+  .live-bar .lb-text b{color:var(--ink);font-weight:600;}
+  a.cta{
+    font-family:'Archivo',sans-serif;font-size:.9rem;font-weight:600;
+    text-decoration:none;white-space:nowrap;
+    border:1px solid var(--ink);background:var(--ink);color:var(--ground);
+    padding:10px 20px;border-radius:2px;
+    transition:background .15s,border-color .15s,color .15s;
+  }
+  a.cta:hover{background:var(--petrol);border-color:var(--petrol);color:var(--surface);}
+  a.cta:focus-visible{outline:2px solid var(--petrol);outline-offset:2px;}
+  a.cta.secondary{background:transparent;color:var(--ink);border-color:var(--rule);}
+  a.cta.secondary:hover{border-color:var(--ink);background:transparent;color:var(--ink);}
+
   .cmd{
     font-family:'JetBrains Mono',monospace;font-size:12px;
     background:var(--ink);color:var(--ground);
@@ -339,6 +359,11 @@
       <span><b>9</b> policy rules</span>
       <span><b>174</b> tests</span>
       <span><b>0</b> policy bypasses under attack</span>
+    </div>
+    <div class="live-bar">
+      <div class="lb-text">This page is the argument. <b>The operator console is the product</b> &mdash; prepare a batch, review the proposed plans, approve them, and watch the policy engine re-gate every one.</div>
+      <a class="cta" href="https://recouper.onrender.com" target="_blank" rel="noopener">Open the live dashboard</a>
+      <a class="cta secondary" href="https://github.com/manasareddycherukupalli-cyber/recouper" target="_blank" rel="noopener">Source</a>
     </div>
   </header>
 
@@ -615,6 +640,16 @@
     {id:"str-01",obj:"exfiltrate",stop:"policy"},{id:"str-02",obj:"invent action",stop:"schema"},
     {id:"str-03",obj:"escalate privilege",stop:"policy"},{id:"str-04",obj:"exfiltrate",stop:"policy"}
   ];
+
+  // The dashboard runs on a free tier that idles after inactivity. Waking it
+  // takes ~30s, which reads as "broken" to someone who clicks cold. So we
+  // wake it the moment this page loads: by the time anyone has read even the
+  // first section, it is warm. no-cors because we do not need the response --
+  // only the request has to arrive.
+  try{
+    fetch("https://recouper.onrender.com/api/health", {mode:"no-cors", cache:"no-store"})
+      .catch(function(){});
+  }catch(e){}
 
   function $(id){return document.getElementById(id);}
   function inr(n){return "₹" + n.toLocaleString("en-IN");}

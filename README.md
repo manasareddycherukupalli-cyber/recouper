@@ -6,7 +6,8 @@ Razorpay AI Buildathon — Track 3: AI Revenue Recovery
 | | |
 |---|---|
 | **Walkthrough** | **https://razorpay-rust-six.vercel.app** — static, always instant |
-| **Live dashboard** | _(deploying)_ — free tier; if it has idled, the first request takes ~30s to wake |
+| **Live dashboard** | **https://recouper.onrender.com** — the operator console, running the real pipeline |
+| **Source** | https://github.com/manasareddycherukupalli-cyber/recouper |
 | **Run it locally** | `pip install -r requirements.txt` then `python -m uvicorn recouper.webapp:app` |
 
 If a hosted link is slow or unreachable, nothing is lost — the entire system
