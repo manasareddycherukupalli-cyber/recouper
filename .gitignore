@@ -21,3 +21,7 @@ PLAN.md
 .vercel/
 
 .vercel
+
+# Video tooling, not part of the product. Kept locally so the data-flow
+# clip can be re-rendered; the rendered mp4 lives outside the repo.
+remotion/
