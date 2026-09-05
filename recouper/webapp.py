@@ -9,10 +9,22 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .agent.gemini import GeminiPlanner
 from .product import DashboardService
 
 
 WEB_ROOT = Path(__file__).resolve().parent.parent / "web"
+
+
+def _live_planner() -> Optional[str]:
+    """Which model, if any, this deployment can call for an on-demand plan.
+
+    Reported so the UI can hide the button rather than offer an action that
+    will fail -- and so a reader can tell at a glance whether the rationales
+    on screen came from a model or from the fallback table.
+    """
+    planner = GeminiPlanner()
+    return planner.model if planner.available else None
 
 
 def create_app(service: Optional[DashboardService] = None) -> FastAPI:
@@ -56,6 +68,7 @@ def create_app(service: Optional[DashboardService] = None) -> FastAPI:
             ],
             "decisions": ["approve", "reject", "escalate"],
             "policy": "All approved work is re-gated by deterministic policy rules",
+            "live_planner": _live_planner(),
         }
 
     @app.get("/api/runs")
@@ -137,6 +150,16 @@ def create_app(service: Optional[DashboardService] = None) -> FastAPI:
                 str(body.get("note", "")),
             )
             return dashboard.get_run(run_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="run or case not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/runs/{run_id}/cases/{case_id}/replan")
+    def replan_case(run_id: str, case_id: str) -> dict:
+        """Ask the live model to re-plan one case, on demand."""
+        try:
+            return dashboard.replan_case(run_id, case_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="run or case not found") from exc
         except ValueError as exc:

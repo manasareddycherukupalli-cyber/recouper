@@ -12,7 +12,7 @@ const el = (tag, cls, text) => {
   return n;
 };
 
-const state = { run: null, runId: null, busy: false };
+const state = { run: null, runId: null, busy: false, livePlanner: null };
 
 const inr = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
 const rupees = (paise) => {
@@ -950,6 +950,38 @@ function renderDrawer(c) {
     plan.appendChild(el("div", null, c.plan.actions.map(titleise).join(" → ") || "no actions"));
     plan.appendChild(el("div", "reason", c.plan.rationale));
     plan.appendChild(el("div", "hint", "source: " + c.plan.source));
+
+    // A live model is only offered when the server actually has one wired up,
+    // and only while the case can still be re-planned. Offering a button that
+    // is going to 409 is worse than not offering it.
+    const replannable = c.status === "awaiting_review" || c.status === "halted";
+    if (state.livePlanner && c.arm === "treated" && replannable) {
+      const ask = el("button", "btn tiny", "Ask " + state.livePlanner + " to re-plan");
+      ask.onclick = async () => {
+        ask.disabled = true;
+        ask.textContent = "Thinking…";
+        try {
+          const fresh = await api(
+            "/runs/" + state.runId + "/cases/" + c.case_id + "/replan",
+            { method: "POST" }
+          );
+          renderDrawer(fresh);
+          state.run = await api("/runs/" + state.runId);
+          render(state.run);
+          status("Re-planned " + c.case_id + " with " + state.livePlanner +
+                 ". The proposal is new; the nine rules that judged it are not.");
+        } catch (err) {
+          ask.disabled = false;
+          ask.textContent = "Ask " + state.livePlanner + " to re-plan";
+          status(err.message, "err");
+        }
+      };
+      const foot = el("div", "decision-row");
+      foot.appendChild(ask);
+      foot.appendChild(el("span", "hint",
+        "One call, this case only. The plan it returns is gated by the same nine rules."));
+      plan.appendChild(foot);
+    }
     drawer.appendChild(plan);
   }
 
@@ -1120,6 +1152,14 @@ async function boot() {
   bind();
   try {
     const health = await api("/health");
+    try {
+      const meta = await api("/meta");
+      state.livePlanner = meta.live_planner || null;
+    } catch (e) {
+      // A missing /meta is not worth failing boot over; the button simply
+      // stays hidden and every rationale comes from the fallback table.
+      state.livePlanner = null;
+    }
     if (health.mode !== "simulator") {
       const banner = $("#mode-banner");
       banner.innerHTML = "";

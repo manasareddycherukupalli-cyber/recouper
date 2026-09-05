@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .agent.execute import BatchHalted, CircuitBreaker, Executor
+from .agent.gemini import GeminiPlanner
 from .agent.plan import DeterministicPlanner, LLMPlanner, Plan, Planner
 from .audit.ledger import AuditLedger
 from .data.generate import DEFAULT_NOW, generate
@@ -413,6 +414,49 @@ class DashboardService:
         self._refresh(session)
         self._persist(session, force=True)
         return session
+
+    def replan_case(self, run_id: str, case_id: str) -> dict:
+        """Re-plan one case with the Gemini planner, on demand.
+
+        Deliberately one case rather than the batch. A free-tier key is rate
+        limited to low tens of requests per minute, so re-planning 277 cases
+        would take twenty minutes and read as a hang; and an operator only
+        ever wants the model's reasoning for the case actually in front of
+        them.
+
+        Only permitted before the case has been decided. Re-planning after
+        execution would rewrite the proposal that the ledger already records
+        as having run, which would make the audit trail a lie.
+        """
+        session = self._require_session(run_id)
+        managed = self._case(session, case_id)
+        if managed.arm != "treated":
+            raise ValueError("control cases are never planned; that is what makes them a control")
+        if managed.status not in {"awaiting_review", "halted"}:
+            raise ValueError(
+                f"case is already {managed.status}; re-planning an executed case "
+                "would contradict the audit record"
+            )
+
+        planner = GeminiPlanner()
+        if not planner.available:
+            raise ValueError("no GEMINI_API_KEY configured on the server")
+
+        plan = planner.plan(managed.case)
+        managed.plan = plan
+        # Re-preview against live state, so the verdicts shown next to the new
+        # proposal are the ones the gate would actually return for it.
+        managed.preview = self._preview_plan(session, managed.case, plan)
+
+        session.ledger.append(
+            actor="llm" if plan.source == "gemini" else "system",
+            event="plan_created",
+            case_id=case_id,
+            reason=plan.rationale,
+            result=plan.to_dict(),
+        )
+        self._persist(session, force=True)
+        return self.get_case(run_id, case_id)
 
     def resume(self, run_id: str) -> DashboardRun:
         session = self._require_session(run_id)
