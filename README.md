@@ -285,7 +285,7 @@ python -m recouper.cli run --json out.json       # machine-readable result
 python -m recouper.cli run --html report.html    # visual report
 python -m recouper.cli verify runs/audit_seed42.jsonl
 python -m recouper.cli params                    # simulation parameters
-python -m pytest tests/ -q                       # 174 tests
+python -m pytest tests/ -q                       # 193 tests
 ```
 
 The `--html` report is a single self-contained file with no scripts and no
@@ -293,10 +293,37 @@ external assets — it opens offline and renders identically anywhere. Chosen
 over a served dashboard deliberately: a report that is just a file has no
 ports, no startup race, and no blank-page-while-booting failure mode.
 
-**With an LLM planner** (optional): copy `.env.example` to `.env` and set
-`ANTHROPIC_API_KEY`. Without it the system runs the deterministic planner and
-marks affected cases `llm_fallback` — a supported mode, not an error. A
-component that touches money should work when the model is unavailable.
+**With a live planner** (optional): set `ANTHROPIC_API_KEY` for the Claude
+planner, or `GEMINI_API_KEY` for the Gemini one, in a `.env` file. Without
+either, the system runs the deterministic planner and marks affected cases
+`llm_fallback` — a supported mode, not an error. A component that touches
+money should work when the model is unavailable.
+
+**Two providers, one set of bounds.** `GeminiPlanner` reuses
+`LLMPlanner._parse` verbatim, so the closed action enum and the
+reject-don't-repair validation are the same code path, not a reimplementation
+— two parsers would be two chances to disagree about what a legal plan is.
+Downstream, the policy engine gates a proposal without knowing which model
+wrote it. On the live console, asking Gemini to re-plan an overdue invoice
+returns:
+
+```
+proposed : send_reminder → create_payment_link
+reasoning: "only 11 days overdue with a moderate amount ... immediate
+            friction-free resolution"
+gate     : ALLOW  send_reminder
+           DENY   create_payment_link   contact_cooldown
+```
+
+The model proposed two contacts; the gate permitted one, because the first
+consumed the 72-hour cooldown. The rationale bought nothing — the gate never
+reads it. A test asserts a do-not-contact customer is refused identically
+whoever authored the plan, and the red-team harness proves containment against
+a *fully compromised* model, which covers any vendor by construction.
+
+The planner is called for one case on demand rather than for the whole batch:
+free tiers are rate-limited to low tens of requests per minute, so planning
+277 cases through one would take twenty minutes and read as a hang.
 
 Everything is seeded. Same seed, same corpus, same numbers.
 
@@ -310,7 +337,7 @@ recouper/
 ├── data/          seeded synthetic corpus (955 records)
 ├── detect/        classification taxonomy + case extraction with dedupe
 ├── policy/        nine hard rules + the gate
-├── agent/         planner (LLM + deterministic fallback), executor
+├── agent/         planners (Claude, Gemini, deterministic fallback), executor
 ├── outcomes/      the simulation model — every parameter documented
 ├── audit/         hash-chained ledger
 ├── eval/          bootstrap CIs, incremental lift, replay + sensitivity analysis
