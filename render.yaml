@@ -22,3 +22,14 @@ services:
       # deploy. Render's default is well past 3.10.
       - key: PYTHONUNBUFFERED
         value: "1"
+      # Declared so a blueprint sync does not drop it, but deliberately not
+      # given a value here: sync:false means "this variable exists, its value
+      # is set in the dashboard, leave it alone". A key committed to the repo
+      # would be a key published to GitHub.
+      #
+      # Absent, the console simply has no live planner: /api/meta reports
+      # live_planner:null, the re-plan button is hidden, and every plan comes
+      # from the deterministic table. A component that touches money has to
+      # work when the model is unavailable.
+      - key: GEMINI_API_KEY
+        sync: false
